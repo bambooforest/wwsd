@@ -6,11 +6,9 @@ library(knitr)
 bib <- read.csv('bibliography.csv', sep="\t", stringsAsFactors = FALSE)
 db <- read.csv('database.csv', stringsAsFactors = FALSE)
 
-db <- db %>% arrange(script)
-rownames(db) <- NULL
-
-bib <- bib %>% arrange(script)
-rownames(bib) <- NULL
+# order for the results
+db <- db %>% arrange(script); rownames(db) <- NULL
+bib <- bib %>% arrange(script); rownames(bib) <- NULL
 
 # Which identifiers don't match?
 db.s <- db %>% select(script) %>% distinct()
@@ -24,9 +22,11 @@ kable(db.s[which(!(db.s$script %in% bib.s$script)),])
 expect_true(all(bib.s$script %in% db.s$script))
 kable(bib.s[which(!(bib.s$script %in% db.s$script)),])
 
-# Which urls don't match (some of these are discrepencies between http and https)
+# Which urls don't match (some of these are discrepencies between http and https, others have an extra space)
+# TODO: fix these
 db.url <- db %>% select(omniglot) %>% distinct()
 bib.url <- bib %>% select(omniglot) %>% distinct()
 
-bib.url[which(!(unique(bib$omniglot) %in% unique(db$omniglot))),]
 db.url[which(!(db.url$omniglot %in% bib.url$omniglot)),]
+bib.url[which(!(bib.url$omniglot %in% db.url$omniglot)),]
+
