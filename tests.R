@@ -40,6 +40,6 @@ expect_true(nrow(distinct.scripts.in.db)==nrow(scripts.urls))
 ## For visual inspection
 write.csv(scripts.urls, file="scripts_urls.csv", row.names = FALSE)
 ## Write new file
-write.csv(df, file="database.csv", row.names = FALSE, quote=FALSE)
+write.csv(df, file="database.csv", row.names = FALSE)
 
 
