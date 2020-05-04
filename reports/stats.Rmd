@@ -1,0 +1,154 @@
+---
+title: "WWSD basic stats"
+author: "Steven Moran <steven.moran@uzh.ch>"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  github_document:
+  pandoc_args: --webtex
+---
+
+# Data prep
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(testthat)
+library(knitr)
+```
+
+Get the data.
+
+```{r}
+bib <- read.csv('bibliography.tsv', sep="\t", stringsAsFactors = FALSE)
+db <- read.csv('database.csv', stringsAsFactors = FALSE)
+```
+
+How many data points are there?
+
+```{r}
+df.scripts <- db %>% select(script) %>% distinct()
+message('There are ', nrow(df.scripts), ' data points.')
+```
+
+How many graphemes vs IPA symbols are there per data point?
+
+```{r}
+grapheme.counts <- db %>% select(script, grapheme) %>% group_by(script) %>% summarize(grapheme_count = n())
+ipa.counts <- db %>% select(script, IPA) %>% distinct() %>% group_by(script) %>% summarize(ipa_count = n())
+counts <- left_join(grapheme.counts, ipa.counts)
+counts %>% head() %>% kable()
+```
+
+On average we expect graphemes to have a one-to-many or one-to-one relationship with their phoneme(s).
+
+```{r}
+counts[which(!(counts$grapheme_count > counts$ipa_count)),]
+```
+Here's an example of a one-to-one g2p language.
+
+```{r}
+db %>% filter(script=="Xhosa") %>% head() %>% kable()
+```
+
+# Some data checks
+
+Are there any NULL IPA rows? No.
+
+```{r}
+expect_equal(nrow(db %>% filter(is.na(IPA))), 0)
+```
+
+Are there empty IPA rows? Yes.
+
+```{r}
+db %>% filter(IPA=="") %>% select(script, grapheme, IPA, comment) %>% kable()
+```
+
+What are the "-" in graphemes?
+
+```{r}
+db %>% filter(grapheme=="-") %>% select(script, grapheme, IPA, comment) %>% kable()
+```
+
+Empty grapheme rows.
+
+```{r}
+db %>% filter(grapheme=="") %>% kable() 
+```
+
+What about graphemes?
+
+```{r}
+expect_equal(nrow(db %>% filter(is.na(grapheme))), 0)
+db %>% filter(grapheme=="") %>% select(script, grapheme, IPA, comment) %>% kable()
+```
+
+Check for duplicate graphemes and IPA relations
+
+```{r}
+dups <- db %>% filter(IPA != "") %>% group_by(script, grapheme, IPA) %>% filter(n()>1) %>% select(script, grapheme, IPA, comment) %>% arrange(script, grapheme, IPA)
+dups %>% kable()
+```
+
+
+# Some plots of the data.
+
+Remove duplicates and empties.
+
+```{r}
+db.clean <- db %>% filter(IPA != "") %>% filter(grapheme!="") %>% filter(grapheme!="-") %>% distinct(script, grapheme, IPA, .keep_all = TRUE)
+```
+
+Merge in writing system type and Glottocodes.
+
+```{r}
+db.clean <- left_join(db.clean, bib, by=c("script"="script"))
+db.clean <- db.clean %>% select(script, grapheme, IPA, comment, glottocode, iso15924)
+```
+
+Merge in geo-coordinates from Glottolog.
+
+```{r}
+geo <- read.csv(url("https://cdstar.shh.mpg.de/bitstreams/EAEA0-E7DE-FA06-8817-0/languages_and_dialects_geo.csv"), stringsAsFactors = FALSE)
+db.clean <- left_join(db.clean, geo)
+```
+
+What do the data points look like globally?
+
+```{r}
+for_map <- db.clean %>% select(script, glottocode, iso15924, latitude, longitude) %>% distinct()
+
+library(ggplot2)
+ggplot(data=for_map, aes(x=longitude,y=latitude, fill=iso15924, color=iso15924)) + 
+  borders("world", colour="gray50", fill="gray50") + 
+  geom_point()
+```
+
+Distribution of writing systems in the data?
+
+```{r}
+for_map %>% select(glottocode, iso15924) %>% distinct() %>% group_by(iso15924) %>% summarize(count = n()) %>% arrange(desc(count)) %>% kable()
+```
+
+Create heat map of graphemes by phonemes
+
+```{r}
+# Just use a single script (Latin has the most data points)
+latn <- db.clean %>% filter(iso15924=="Latn")
+g2p <- rename(count(latn, grapheme, IPA), Freq = n) %>% arrange(desc(Freq))
+# graphemes <- g2p %>% select(grapheme) %>% group_by(grapheme) %>% summarize(count=n()) %>% arrange(desc(count))
+g2p.cut <- g2p %>% head(n=50)
+ggplot(g2p.cut, aes(IPA, grapheme, fill=Freq)) + geom_tile()
+```
+
+```{r}
+g2p.wide <- pivot_wider(g2p.cut, names_from = IPA, values_from = Freq)
+g2p.wide <- column_to_rownames(g2p.wide, var = "grapheme")
+g2p.wide[is.na(g2p.wide)] <- 0
+g2p_matrix <- data.matrix(g2p.wide)
+heatmap(g2p_matrix, Rowv=NA, Colv=NA, col = heat.colors(256), scale="column", margins=c(5,10))
+```
+
+```{r}
+# TODO: create adjaceny matrix graph of language's graphemes to phonemes
+```
+
