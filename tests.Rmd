@@ -1,0 +1,145 @@
+---
+title: "Tests for WWSD data"
+author: "Steven Moran"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  github_document:
+  pandoc_args: --webtex
+---
+
+```{r, warning=FALSE, message=FALSE}
+library(dplyr)
+library(testthat)
+library(knitr)
+```
+
+```{r}
+db <- read.csv('database.csv', stringsAsFactors = FALSE)
+bib <- read.csv('bibliography.csv', sep="\t", stringsAsFactors = FALSE)
+```
+
+# Check for matching fields across the db and the bibliography
+
+Ordered for results
+
+```{r}
+db <- db %>% arrange(script); rownames(db) <- NULL
+bib <- bib %>% arrange(script); rownames(bib) <- NULL
+```
+
+Which identifiers don't match?
+
+```{r}
+db.s <- db %>% select(script) %>% distinct()
+bib.s <- bib %>% select(script) %>% distinct()
+```
+
+Entries in the database that are not in the bibliography index
+
+```{r}
+expect_true(all(db.s$script %in% bib.s$script))
+# If the test above fails, uncomment this line to show which entries are not in the bib file.
+# kable(db.s[which(!(db.s$script %in% bib.s$script)),])
+```
+
+Entries in the bibliography that are not in the database
+
+```{r}
+# TODO: The follow test fails until the data is fixed.
+# expect_true(all(bib.s$script %in% db.s$script))
+kable(bib.s[which(!(bib.s$script %in% db.s$script)),])
+```
+
+Which urls don't match (some of these are discrepencies between http and https, others have an extra space)
+
+```{r}
+db.url <- db %>% select(omniglot) %>% distinct()
+bib.url <- bib %>% select(omniglot) %>% distinct()
+
+db.url[which(!(db.url$omniglot %in% bib.url$omniglot)),] %>% kable()
+bib.url[which(!(bib.url$omniglot %in% db.url$omniglot)),] %>% kable()
+```
+
+Recreate the database.csv file with the updated (omniglot) fields in the bibliography.csv
+
+```{r}
+df <- left_join(db, bib, by=c("script"="script"))
+df <- df %>% select(script, grapheme, IPA, comment, source.x, omniglot.y)
+df <- df %>% rename(source=source.x, omniglot=omniglot.y)
+```
+
+Check the results of the omniglot url updates
+```{r}
+scripts.urls <- df %>% select(script, omniglot) %>% distinct() %>% arrange(script)
+distinct.scripts.in.db <- db %>% select(script) %>% distinct()
+
+# TODO: this follow test fails until the data is fixed.
+# expect_true(nrow(distinct.scripts.in.db)==nrow(scripts.urls))
+```
+
+For visual inspection
+```{r}
+# write.csv(scripts.urls, file="scripts_urls.csv", row.names = FALSE)
+```
+
+Write new file
+```{r}
+# write.csv(df, file="database.csv", row.names = FALSE)
+```
+
+# Now inspect the actual g2p data
+
+Are there any NULL IPA rows? No.
+```{r}
+expect_equal(nrow(db %>% filter(is.na(IPA))), 0)
+```
+
+Are there empty IPA rows? Yes.
+
+```{r}
+db %>% filter(IPA=="") %>% select(script, grapheme, IPA, comment) %>% kable()
+```
+
+What are the "-" in graphemes?
+
+```{r}
+db %>% filter(grapheme=="-") %>% select(script, grapheme, IPA, comment) %>% kable()
+```
+
+Empty grapheme rows.
+
+```{r}
+db %>% filter(grapheme=="") %>% kable() 
+```
+
+What about graphemes?
+
+```{r}
+expect_equal(nrow(db %>% filter(is.na(grapheme))), 0)
+db %>% filter(grapheme=="") %>% select(script, grapheme, IPA, comment) %>% kable()
+```
+
+Check for duplicate graphemes and IPA relations
+
+```{r}
+dups <- db %>% filter(IPA != "") %>% group_by(script, grapheme, IPA) %>% filter(n()>1) %>% select(script, grapheme, IPA, comment) %>% arrange(script, grapheme, IPA)
+dups %>% kable()
+```
+
+Note that the segments do not follow a consistent IPA convention (cf. http://phoible.github.io/conventions/). For example:
+
+* ejectives use different Unicode appostrophes
+* aspiration is marked with <h> or <ʰ>
+* diacritic ordering is ambiguous
+
+```{r}
+db %>% filter(grepl("^p", IPA)) %>% select(IPA) %>% distinct() %>% arrange(IPA)
+```
+
+Remove duplicates and empties
+
+```{r}
+# TODO: clean up the segments, write to disk, and update the CSV file(s)
+db.clean <- db %>% filter(IPA != "") %>% filter(grapheme!="") %>% filter(grapheme!="-") %>% distinct(script, grapheme, IPA, .keep_all = TRUE)
+```
+
