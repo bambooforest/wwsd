@@ -18,8 +18,8 @@ library(knitr)
 Get the data.
 
 ```{r}
-bib <- read.csv('bibliography.tsv', sep="\t", stringsAsFactors = FALSE)
-db <- read.csv('database.csv', stringsAsFactors = FALSE)
+bib <- read.csv('../bibliography.tsv', sep="\t", stringsAsFactors = FALSE)
+db <- read.csv('../database.csv', stringsAsFactors = FALSE)
 ```
 
 How many data points are there?
